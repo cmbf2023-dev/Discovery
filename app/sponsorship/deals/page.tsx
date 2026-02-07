@@ -20,7 +20,7 @@ import {
   Eye,
   Calendar,
   TrendingUp,
-  Handshake,
+  Hand
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
@@ -199,7 +199,7 @@ export default function SponsorshipDealsPage() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <Handshake className="w-6 h-6 text-purple-500" />
+              <Hand className="w-6 h-6 text-purple-500" />
               <h1 className="text-xl font-bold">Sponsorship Deals</h1>
             </div>
           </div>
