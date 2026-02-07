@@ -74,7 +74,7 @@ export default function RegisterPage() {
     try {
       const result = await register(formData.username, formData.email, formData.password)
       if (result.success) {
-        router.push("/")
+        router.push("/platforms")
       } else {
         setError(result.error || "Registration failed. Please try again.")
       }

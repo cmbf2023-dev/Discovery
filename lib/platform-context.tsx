@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createClient } from "@/lib/supabase/client"
 
 export type Platform = 
   | "feed"
@@ -118,6 +119,7 @@ export const platforms: PlatformInfo[] = [
 interface PlatformContextType {
   currentPlatform: Platform
   defaultPlatform: Platform
+  hasDefaultSet: boolean
   setCurrentPlatform: (platform: Platform) => void
   setDefaultPlatform: (platform: Platform) => void
   getPlatformInfo: (platform: Platform) => PlatformInfo | undefined
@@ -128,19 +130,31 @@ const PlatformContext = createContext<PlatformContextType | undefined>(undefined
 export function PlatformProvider({ children }: { children: ReactNode }) {
   const [currentPlatform, setCurrentPlatformState] = useState<Platform>("feed")
   const [defaultPlatform, setDefaultPlatformState] = useState<Platform>("feed")
+  const [hasDefaultSet, setHasDefaultSet]    = useState<boolean>(false)
+  const supabase = createClient()
 
   useEffect(() => {
-    const savedDefault = localStorage.getItem("discovery_default_platform") as Platform
-    const savedCurrent = localStorage.getItem("discovery_current_platform") as Platform
-    
-    if (savedDefault && platforms.find(p => p.id === savedDefault)) {
-      setDefaultPlatformState(savedDefault)
+    const loadUserPlatform = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const userDefaultPlatform = user.user_metadata?.default_platform as Platform
+        if (userDefaultPlatform && platforms.find(p => p.id === userDefaultPlatform)) {
+          setDefaultPlatformState(userDefaultPlatform)
+          setHasDefaultSet(true)
+          setCurrentPlatformState(userDefaultPlatform)
+        } else {
+          setHasDefaultSet(false)
+        }
+      }
+
+      // Fallback to localStorage for current platform
+      const savedCurrent = localStorage.getItem("discovery_current_platform") as Platform
+      if (savedCurrent && platforms.find(p => p.id === savedCurrent)) {
+        setCurrentPlatformState(savedCurrent)
+      }
     }
-    if (savedCurrent && platforms.find(p => p.id === savedCurrent)) {
-      setCurrentPlatformState(savedCurrent)
-    } else if (savedDefault) {
-      setCurrentPlatformState(savedDefault)
-    }
+
+    loadUserPlatform()
   }, [])
 
   const setCurrentPlatform = (platform: Platform) => {
@@ -148,9 +162,18 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("discovery_current_platform", platform)
   }
 
-  const setDefaultPlatform = (platform: Platform) => {
+  const setDefaultPlatform = async (platform: Platform) => {
     setDefaultPlatformState(platform)
-    localStorage.setItem("discovery_default_platform", platform)
+    setCurrentPlatformState(platform)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.auth.updateUser({
+        data: {
+          default_platform: platform,
+        },
+      })
+    }
   }
 
   const getPlatformInfo = (platform: Platform) => {
@@ -165,6 +188,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         setCurrentPlatform,
         setDefaultPlatform,
         getPlatformInfo,
+        hasDefaultSet
       }}
     >
       {children}
