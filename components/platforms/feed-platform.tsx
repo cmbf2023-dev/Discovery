@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import  {useRouter} from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -107,6 +108,7 @@ interface MenuItem {
   icon: React.ReactNode
   notification?: number
   active?: boolean
+  link?: string
 }
 
 const mockStories: Story[] = [
@@ -191,19 +193,19 @@ const mockPosts: Post[] = [
 ]
 
 const leftMenuItems: MenuItem[] = [
-  { id: "home", label: "Home", icon: <Home className="h-6 w-6" />, active: true },
-  { id: "friends", label: "Friends", icon: <UserCheck className="h-6 w-6" />, notification: 5 },
-  { id: "marketplace", label: "Marketplace", icon: <Store className="h-6 w-6" /> },
-  { id: "groups", label: "Groups", icon: <UsersRound className="h-6 w-6" />, notification: 12 },
-  { id: "watch", label: "Watch", icon: <Tv className="h-6 w-6" />, notification: 9 },
-  { id: "memories", label: "Memories", icon: <History className="h-6 w-6" /> },
-  { id: "saved", label: "Saved", icon: <BookmarkCheck className="h-6 w-6" /> },
-  { id: "pages", label: "Pages", icon: <FlagTriangleRight className="h-6 w-6" /> },
-  { id: "events", label: "Events", icon: <Calendar className="h-6 w-6" /> },
-  { id: "ad-center", label: "Ad Center", icon: <GraduationCap className="h-6 w-6" /> },
-  { id: "fundraisers", label: "Fundraisers", icon: <HeartHandshake className="h-6 w-6" /> },
-  { id: "gaming", label: "Gaming", icon: <Gamepad2 className="h-6 w-6" /> },
-  { id: "news", label: "News", icon: <Newspaper className="h-6 w-6" /> },
+  { id: "home", label: "Home", icon: <Home className="h-6 w-6" />, active: true, link: "/" },
+  { id: "friends", label: "Friends", icon: <UserCheck className="h-6 w-6" />, notification: 5, link:"/friends" },
+  { id: "marketplace", label: "Marketplace", icon: <Store className="h-6 w-6" />, link:"/marketplace" },
+  { id: "groups", label: "Groups", icon: <UsersRound className="h-6 w-6" />, notification: 12, link:"/groups" },
+  { id: "watch", label: "Watch", icon: <Tv className="h-6 w-6" />, notification: 9, link:"/watch" },
+  { id: "memories", label: "Memories", icon: <History className="h-6 w-6" />, link:"/memories" },
+  { id: "saved", label: "Saved", icon: <BookmarkCheck className="h-6 w-6" />, link:"/saved" },
+  { id: "pages", label: "Pages", icon: <FlagTriangleRight className="h-6 w-6" />, link:"/pages" },
+  { id: "events", label: "Events", icon: <Calendar className="h-6 w-6" />, link:"/events" },
+  { id: "ad-center", label: "Ad Center", icon: <GraduationCap className="h-6 w-6" />, link:"/ad-center" },
+  { id: "fundraisers", label: "Fundraisers", icon: <HeartHandshake className="h-6 w-6" /> , link:"/fundraisers" },
+  { id: "gaming", label: "Gaming", icon: <Gamepad2 className="h-6 w-6" />, link:"/gaming" },
+  { id: "news", label: "News", icon: <Newspaper className="h-6 w-6" />, link:"/news" },
 ]
 
 const shortcuts = [
@@ -224,6 +226,7 @@ const contacts = [
 
 export function FeedPlatform() {
   const { user } = useAuth()
+  const router   = useRouter()
   const [posts, setPosts] = useState<Post[]>(mockPosts)
   const [newPostContent, setNewPostContent] = useState("")
   const [showCreatePost, setShowCreatePost] = useState(false)
@@ -400,7 +403,7 @@ export function FeedPlatform() {
               {/* Main Menu */}
               <nav className="space-y-1">
                 {leftMenuItems.map((item) => (
-                  <button
+                  <button onClick={() => router.push(`${item.link}`)}
                     key={item.id}
                     className={`flex items-center gap-3 w-full p-3 rounded-lg hover:bg-gray-100 ${
                       item.active ? "bg-gray-100 font-semibold" : ""
