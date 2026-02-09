@@ -3,6 +3,7 @@
 import React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -163,9 +164,13 @@ export function MarketplacePlatform() {
   const [showFilters, setShowFilters] = useState(false)
 
   const handleLike = (id: string) => {
-    setListings(listings.map(listing => 
+    setListings(listings.map(listing =>
       listing.id === id ? { ...listing, isLiked: !listing.isLiked } : listing
     ))
+  }
+
+  const handleProductClick = (productId: string) => {
+    router.push(`/shop/products/${productId}`)
   }
 
   const filteredListings = listings.filter(listing => {
@@ -273,7 +278,7 @@ export function MarketplacePlatform() {
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
           <div className="flex gap-3">
             {listings.filter(l => l.isFeatured).map((listing) => (
-              <Card key={listing.id} className="flex-shrink-0 w-64 overflow-hidden">
+              <Card key={listing.id} className="flex-shrink-0 w-64 overflow-hidden cursor-pointer" onClick={() => handleProductClick(listing.id)}>
                 <div className="relative">
                   <img
                     src={listing.image || "/placeholder.svg"}
@@ -282,7 +287,10 @@ export function MarketplacePlatform() {
                   />
                   <Badge className="absolute top-2 left-2 bg-emerald-600">Featured</Badge>
                   <button
-                    onClick={() => handleLike(listing.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleLike(listing.id)
+                    }}
                     className={`absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center ${
                       listing.isLiked ? "text-red-500" : "text-muted-foreground"
                     }`}
@@ -338,7 +346,7 @@ export function MarketplacePlatform() {
         {viewMode === "grid" ? (
           <div className="grid grid-cols-2 gap-3">
             {filteredListings.map((listing) => (
-              <Card key={listing.id} className="overflow-hidden">
+              <Card key={listing.id} className="overflow-hidden cursor-pointer" onClick={() => handleProductClick(listing.id)}>
                 <div className="relative">
                   <img
                     src={listing.image || "/placeholder.svg"}
@@ -346,7 +354,10 @@ export function MarketplacePlatform() {
                     className="w-full h-36 object-cover"
                   />
                   <button
-                    onClick={() => handleLike(listing.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleLike(listing.id)
+                    }}
                     className={`absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center ${
                       listing.isLiked ? "text-red-500" : "text-muted-foreground"
                     }`}

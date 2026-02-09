@@ -283,14 +283,14 @@ export function FeedPlatform() {
           <div className="flex items-center justify-between h-14">
             {/* Left: Logo and Search */}
             <div className="flex items-center gap-4">
-              <div className="text-blue-600 font-bold text-2xl">facebook</div>
+              <div className="text-blue-600 font-bold text-2xl">Discovery</div>
               
               {/* Search Bar - Hidden on mobile, visible on desktop */}
               {!isMobile && (
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="Search Facebook"
+                    placeholder="Search Discovery"
                     className="pl-10 bg-gray-100 border-0 rounded-full w-64 focus:bg-white focus:shadow-sm"
                   />
                 </div>
