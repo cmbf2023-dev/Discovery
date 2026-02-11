@@ -21,9 +21,21 @@ import { VideoStudioPlatform } from "@/components/platforms/video-studio-platfor
 import { BusinessPlatform } from "@/components/platforms/business-platform"
 
 export default function HomePage() {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const { currentPlatform } = usePlatform()
   const router = useRouter()
+  console.log("Current User:", user)
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!user) {
     return (

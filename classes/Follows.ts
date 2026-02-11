@@ -87,7 +87,7 @@ export class Follows {
     return data?.map(item => item.profiles) || [];
   }
 
-  async getFollowing(userId: string): Promise<any[]> {
+  async getFollowingUser(userId: string): Promise<any[]> {
     const { data, error } = await this.supabase
       .from('follows')
       .select('profiles!follows_following_id_fkey(*)')

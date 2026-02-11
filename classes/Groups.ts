@@ -44,6 +44,16 @@ export class Groups {
     return data;
   }
 
+  async getUserGroups(userId: string): Promise<Group[]> {
+    const { data, error } = await this.supabase
+      .from('group_members')
+      .select('groups(*)')
+      .eq('member_id', userId);
+
+      if (error) throw error;
+    return data.map((item: any) => item.groups);
+  }
+
   async update(id: string, updates: Partial<Omit<Group, 'id' | 'created_at' | 'updated_at'>>): Promise<Group | null> {
     const { data, error } = await this.supabase
       .from('groups')

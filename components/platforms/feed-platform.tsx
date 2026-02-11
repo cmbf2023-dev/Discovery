@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import  {useRouter} from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -65,7 +66,14 @@ import {
   Cloud,
   Plus,
   CircleUser,
+  Loader2,
 } from "lucide-react"
+import { Posts, Post as DBPost } from "@/classes/Posts"
+import { Reactions } from "@/classes/Reactions"
+import { Comments } from "@/classes/Comments"
+import { Profiles } from "@/classes/Profiles"
+import { createClient } from "@/lib/supabase/client"
+import { getUserFriends, getUserFollowing, getUserGroupsPosts } from "@/lib/functions"
 
 interface Post {
   id: string
@@ -227,11 +235,23 @@ const contacts = [
 export function FeedPlatform() {
   const { user } = useAuth()
   const router   = useRouter()
-  const [posts, setPosts] = useState<Post[]>(mockPosts)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [newPostContent, setNewPostContent] = useState("")
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [isMobile, setIsMobile] = useState(false)
+  const [creatingPost, setCreatingPost] = useState(false)
+
+  // Initialize class instances
+  const postsClass = new Posts()
+  const reactionsClass = new Reactions()
+  const commentsClass = new Comments()
+  const profilesClass = new Profiles()
+
+  // Get supabase client for direct queries
+  const supabase = createClient();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -244,23 +264,43 @@ export function FeedPlatform() {
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
-  const handleReaction = (postId: string, reaction: string) => {
-    setPosts(posts.map(post => {
-      if (post.id === postId) {
-        const wasReacted = post.userReaction === reaction
-        return {
-          ...post,
-          userReaction: wasReacted ? undefined : reaction,
-          reactions: {
-            ...post.reactions,
-            [reaction + "s"]: wasReacted 
-              ? post.reactions[reaction + "s" as keyof typeof post.reactions] - 1
-              : post.reactions[reaction + "s" as keyof typeof post.reactions] + 1
+  const handleReaction = async (postId: string, reaction: string) => {
+    if (!user?.id) return
+
+    try {
+      const currentPost = posts.find(p => p.id === postId)
+      if (!currentPost) return
+
+      const wasReacted = currentPost.userReaction === reaction
+
+      // Update UI optimistically
+      setPosts(posts.map(post => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            userReaction: wasReacted ? undefined : reaction,
+            reactions: {
+              ...post.reactions,
+              [reaction + "s"]: wasReacted
+                ? post.reactions[reaction + "s" as keyof typeof post.reactions] - 1
+                : post.reactions[reaction + "s" as keyof typeof post.reactions] + 1
+            }
           }
         }
+        return post
+      }))
+
+      // Update database
+      if (wasReacted) {
+        await reactionsClass.removeReaction(user.id, postId)
+      } else {
+        await reactionsClass.reactToPost(postId, user.id, reaction)
       }
-      return post
-    }))
+    } catch (err) {
+      console.error('Error handling reaction:', err)
+      // Revert optimistic update on error
+      // You might want to refetch posts here
+    }
   }
 
   const getTotalReactions = (reactions: Post["reactions"]) => {
@@ -274,6 +314,135 @@ export function FeedPlatform() {
       case "private": return <Lock className="h-3 w-3" />
     }
   }
+
+  // Fetch posts from database
+  const fetchPosts = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      let friends: any[] = [];
+
+      if(user?.id ){
+        friends = await getUserFriends(user.id);
+        friends = friends.concat(await getUserFollowing(user.id));
+      }
+
+      // Get posts from database - for now, get all posts (you might want to filter by friends/following later)
+      // Since there's no getAll method, we'll use the Supabase client directly
+      const { data: dbPosts, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .in('created_by', friends)
+        .order('created_at', { ascending: false })
+
+      if (postsError) throw postsError
+
+      const groupPost = await getUserGroupsPosts(user?.id || '');
+
+      dbPosts.push(...groupPost);
+
+      // Transform to UI format
+      const transformedPosts: Post[] = await Promise.all(
+        dbPosts.map(async (dbPost: DBPost) => {
+          // Get author profile
+          const authorProfile = await profilesClass.getById(dbPost.author_id)
+
+          // Get reactions for this post
+          const reactions = await reactionsClass.getByPost(dbPost.id)
+          const reactionCounts = reactions.reduce((acc, reaction) => {
+            acc[reaction.reaction_type] = (acc[reaction.reaction_type] || 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+
+          // Get user's reaction if logged in
+          let userReaction: string | undefined
+          if (user?.id) {
+            const userReactions = reactions.filter(r => r.user_id === user.id)
+            userReaction = userReactions[0]?.reaction_type
+          }
+
+          return {
+            id: dbPost.id,
+            author: {
+              id: authorProfile?.id || dbPost.author_id,
+              name: authorProfile?.full_name || authorProfile?.username || 'Unknown User',
+              avatar: authorProfile?.avatar_url || '/placeholder.svg',
+              isVerified: authorProfile?.is_verified || false,
+            },
+            content: dbPost.content || '',
+            images: dbPost.media_urls || [],
+            video: dbPost.media_type === 'video' ? (dbPost.media_urls?.[0] || '') : undefined,
+            timestamp: new Date(dbPost.created_at).toLocaleString(),
+            privacy: "public", // Default for now, can be enhanced later
+            reactions: {
+              likes: reactionCounts.like || 0,
+              loves: reactionCounts.love || 0,
+              laughs: reactionCounts.haha || 0,
+              sads: reactionCounts.sad || 0,
+              angries: reactionCounts.angry || 0,
+            },
+            comments: dbPost.comments_count,
+            shares: dbPost.shares_count,
+            userReaction,
+          }
+        })
+      )
+
+      setPosts(transformedPosts)
+    } catch (err) {
+      console.error('Error fetching posts:', err)
+      setError('Failed to load posts')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Create new post
+  const createPost = async () => {
+    if (!user?.id || (!newPostContent.trim() && selectedImages.length === 0)) return
+
+    try {
+      setCreatingPost(true)
+
+      const postData = {
+        author_id: user.id,
+        owner_type: 'profile' as const,
+        owner_id: user.id,
+        content: newPostContent.trim(),
+        media_urls: selectedImages,
+        media_type: selectedImages.length > 0 ? 'image' as const : undefined,
+        likes_count: 0,
+        comments_count: 0,
+        shares_count: 0,
+        views_count: 0,
+        is_pinned: false,
+        reaction_counts: {},
+      }
+
+      const newPost = await postsClass.create(postData)
+
+      if (newPost) {
+        // Refresh posts to include the new one
+        await fetchPosts()
+
+        // Reset form
+        setNewPostContent('')
+        setSelectedImages([])
+        setShowCreatePost(false)
+      }
+    } catch (err) {
+      console.error('Error creating post:', err)
+      setError('Failed to create post')
+    } finally {
+      setCreatingPost(false)
+    }
+  }
+
+  // Load posts on component mount
+  useEffect(() => {
+    fetchPosts()
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -301,22 +470,22 @@ export function FeedPlatform() {
             {!isMobile && (
               <div className="flex items-center gap-1">
                 <Button variant="ghost" className="h-14 px-8 rounded-none border-b-2 border-blue-600 text-blue-600">
-                  <Home className="h-6 w-6" />
+                  <Link href="/"> <Home className="h-6 w-6" /> </Link>
                 </Button>
                 <Button variant="ghost" className="h-14 px-8 rounded-none hover:bg-gray-100">
-                  <UserCheck className="h-6 w-6" />
+                  <Link href='/friends'><UserCheck className="h-6 w-6" /></Link>
                 </Button>
                 <Button variant="ghost" className="h-14 px-8 rounded-none hover:bg-gray-100">
-                  <VideoIcon className="h-6 w-6" />
+                  <Link href='/videos'><VideoIcon className="h-6 w-6" /></Link>
                 </Button>
                 <Button variant="ghost" className="h-14 px-8 rounded-none hover:bg-gray-100">
-                  <Store className="h-6 w-6" />
+                  <Link href='/marketplace'><Store className="h-6 w-6" /></Link>
                 </Button>
                 <Button variant="ghost" className="h-14 px-8 rounded-none hover:bg-gray-100">
-                  <UsersRound className="h-6 w-6" />
+                  <Link href='/followers'><UsersRound className="h-6 w-6" /></Link>
                 </Button>
                 <Button variant="ghost" className="h-14 px-8 rounded-none hover:bg-gray-100">
-                  <Gamepad2 className="h-6 w-6" />
+                  <Link href='/games'><Gamepad2 className="h-6 w-6" /></Link>
                 </Button>
               </div>
             )}
@@ -334,11 +503,11 @@ export function FeedPlatform() {
                 </>
               )}
               <Button variant="ghost" size="icon" className="h-10 w-10 relative">
-                <MessageSquare className="h-5 w-5" />
-                {!isMobile && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>}
+                <Link href='/messages'><MessageSquare className="h-5 w-5" />
+                {!isMobile && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>}</Link>
               </Button>
               <Button variant="ghost" size="icon" className="h-10 w-10 relative">
-                <Bell className="h-5 w-5" />
+                <Link href='/notifications'><Bell className="h-5 w-5" /></Link>
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">9</span>
               </Button>
               {!isMobile && (
@@ -365,16 +534,16 @@ export function FeedPlatform() {
           {isMobile && (
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 z-50">
               <Button variant="ghost" size="icon" className="h-12 w-12 text-blue-600">
-                <Home className="h-6 w-6" />
+                <Link href='/'><Home className="h-6 w-6" /></Link>
               </Button>
               <Button variant="ghost" size="icon" className="h-12 w-12">
-                <UserCheck className="h-6 w-6" />
+                <Link href='/profile'><UserCheck className="h-6 w-6" /></Link>
               </Button>
               <Button variant="ghost" size="icon" className="h-12 w-12">
-                <VideoIcon className="h-6 w-6" />
+                <Link href='/video'><VideoIcon className="h-6 w-6" /></Link>
               </Button>
               <Button variant="ghost" size="icon" className="h-12 w-12">
-                <Store className="h-6 w-6" />
+                <Link href='/marketplace'><Store className="h-6 w-6" /></Link>
               </Button>
               <Button variant="ghost" size="icon" className="h-12 w-12">
                 <Menu className="h-6 w-6" />
@@ -403,8 +572,9 @@ export function FeedPlatform() {
               {/* Main Menu */}
               <nav className="space-y-1">
                 {leftMenuItems.map((item) => (
-                  <button onClick={() => router.push(`${item.link}`)}
+                  <Link
                     key={item.id}
+                    href={item.link || "#"}
                     className={`flex items-center gap-3 w-full p-3 rounded-lg hover:bg-gray-100 ${
                       item.active ? "bg-gray-100 font-semibold" : ""
                     }`}
@@ -418,7 +588,7 @@ export function FeedPlatform() {
                         {item.notification}
                       </span>
                     )}
-                  </button>
+                  </Link>
                 ))}
               </nav>
 
@@ -556,7 +726,7 @@ export function FeedPlatform() {
                         <span className="text-sm font-medium">Add to your post</span>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-9 w-9 text-green-500 hover:bg-green-50">
-                            <ImageIcon className="h-5 w-5" />
+                            <Link href="/groups"><ImageIcon className="h-5 w-5" /></Link>
                           </Button>
                           <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50">
                             <Users className="h-5 w-5" />
@@ -572,11 +742,19 @@ export function FeedPlatform() {
                           </Button>
                         </div>
                       </div>
-                      <Button 
-                        className="w-full" 
-                        disabled={!newPostContent.trim() && selectedImages.length === 0}
+                      <Button
+                        className="w-full"
+                        disabled={!newPostContent.trim() && selectedImages.length === 0 || creatingPost}
+                        onClick={createPost}
                       >
-                        Post
+                        {creatingPost ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Posting...
+                          </>
+                        ) : (
+                          'Post'
+                        )}
                       </Button>
                     </div>
                   </DialogContent>
@@ -601,7 +779,21 @@ export function FeedPlatform() {
 
           {/* Posts Feed */}
           <div className="space-y-4">
-            {posts.map((post) => (
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="text-red-500 mb-4">{error}</p>
+                <Button onClick={fetchPosts}>Try Again</Button>
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
+              </div>
+            ) : (
+              posts.map((post) => (
               <Card key={post.id}>
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between">
@@ -780,7 +972,8 @@ export function FeedPlatform() {
                   </div>
                 </CardFooter>
               </Card>
-            ))}
+              ))
+            )}
           </div>
         </main>
 

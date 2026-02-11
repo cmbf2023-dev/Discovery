@@ -162,6 +162,7 @@ export function MarketplacePlatform() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [showFilters, setShowFilters] = useState(false)
+  const router = useRouter()
 
   const handleLike = (id: string) => {
     setListings(listings.map(listing =>
@@ -170,7 +171,7 @@ export function MarketplacePlatform() {
   }
 
   const handleProductClick = (productId: string) => {
-    router.push(`/shop/products/${productId}`)
+    router.push(`/product/${productId}`)
   }
 
   const filteredListings = listings.filter(listing => {
