@@ -36,13 +36,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
 
   useEffect(() => {
-    // Get initial session
+    console.log("use effect running:")
+    // Get initial session with timeout
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        setUser(mapSupabaseUserToUser(session.user))
+      console.log("testing await session")
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Session fetch timeout')), 5000))
+        ])
+        const { data: { session } } = result as any
+        console.log("user session: ", session?.user );
+        if (session?.user) {
+          setUser(mapSupabaseUserToUser(session.user))
+        }
+      } catch (error) {
+        console.error("Error getting session:", error)
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     getSession()
@@ -50,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log("user auth change: ", session?.user );
         if (session?.user) {
           setUser(mapSupabaseUserToUser(session.user))
         } else {
@@ -59,7 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   const mapSupabaseUserToUser = (supabaseUser: SupabaseUser): User => {
